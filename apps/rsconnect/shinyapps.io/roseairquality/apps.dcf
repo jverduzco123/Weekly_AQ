@@ -1,0 +1,10 @@
+name: apps
+title:
+username: roseairquality
+account: roseairquality
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 15942491
+bundleId: 11147107
+url: https://roseairquality.shinyapps.io/apps/
+version: 1
