@@ -21,10 +21,10 @@ clean_monitor_data <- function(path, location_name) {
 }
 
 # Read in Data --------------------------------------------------------------------
-oakland_mon <- clean_monitor_data("~/Weekly_AQ/AQ_Weekly_Data/PurpleAir_Week_Oct19_Oct26_2025/EastOaklandRoseOct19to26.csv", "East Oakland Rose")
-pittsburg <- clean_monitor_data("~/Weekly_AQ/AQ_Weekly_Data/PurpleAir_Week_Oct19_Oct26_2025/PittsburgRoseOct19to26.csv", "Pittsburg Rose")
-pittsburg_high <- clean_monitor_data("~/Weekly_AQ/AQ_Weekly_Data/PurpleAir_Week_Oct19_Oct26_2025/PittsburgHighRoseOct19to26.csv", "Pittsburg High Rose")
-richmond <- clean_monitor_data("~/Weekly_AQ/AQ_Weekly_Data/PurpleAir_Week_Oct19_Oct26_2025/PointRichmondRoseOct19to26.csv", "Point Richmond Rose")
+#oakland_mon <- clean_monitor_data("apps/AQ_Weekly_Data/PurpleAir_Week_Oct19_Oct26_2025/EastOaklandRoseOct19to26.csv", "East Oakland Rose")
+#pittsburg <- clean_monitor_data("apps/AQ_Weekly_Data/PurpleAir_Week_Oct19_Oct26_2025/PittsburgRoseOct19to26.csv", "Pittsburg Rose")
+#pittsburg_high <- clean_monitor_data("apps/AQ_Weekly_Data/PurpleAir_Week_Oct19_Oct26_2025/PittsburgHighRoseOct19to26.csv", "Pittsburg High Rose")
+#richmond <- clean_monitor_data("apps/AQ_Weekly_Data/PurpleAir_Week_Oct19_Oct26_2025/PointRichmondRoseOct19to26.csv", "Point Richmond Rose")
 
 df_all <- bind_rows(oakland_mon, pittsburg, pittsburg_high, richmond)
 

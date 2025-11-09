@@ -54,6 +54,89 @@ theme_youth <- bs_theme(
 )
 
 # -----------------------------
+# Window Maker Function
+# -----------------------------
+
+# Finding best times + exposure windows (uses base data.frame + dplyr joins)
+find_best_worst_windows <- function(hour_df,
+                                    window_size = 3,
+                                    allowed_start = 6,
+                                    allowed_end = 22,
+                                    labels_in = NULL) {
+  # expect hour_df has columns: hour_of_day (0-23) and hour_of_day_avg
+  # create a full 0:23 frame and join
+  full_hours <- data.frame(hour_of_day = 0:23)
+  if (!("hour_of_day_avg" %in% names(hour_df))) {
+    stop("hour_df must contain column 'hour_of_day_avg'")
+  }
+  full_hours <- full_hours |>
+    dplyr::left_join(hour_df |> dplyr::select(hour_of_day, hour_of_day_avg),
+                     by = "hour_of_day") |>
+    dplyr::arrange(hour_of_day)
+  
+  n <- nrow(full_hours)
+  
+  # compute rolling averages for windows that don't wrap (end <= 23)
+  rolling_avg <- rep(NA_real_, n)
+  for (i in 1:n) {
+    idx_end <- i + window_size - 1
+    if (idx_end > n) {
+      rolling_avg[i] <- NA_real_
+    } else {
+      rolling_avg[i] <- mean(full_hours$hour_of_day_avg[i:idx_end], na.rm = TRUE)
+      # if all values NA -> result is NaN -> set to NA
+      if (is.nan(rolling_avg[i])) rolling_avg[i] <- NA_real_
+    }
+  }
+  full_hours$rolling_avg <- rolling_avg
+  
+  # allowed starts (integers)
+  allowed_starts <- allowed_start:allowed_end
+  allowed_starts <- allowed_starts[(allowed_starts + window_size - 1) <= allowed_end]
+  
+  if (length(allowed_starts) == 0) {
+    return(list(error = TRUE,
+                message = paste0("No valid ", window_size, "-hour windows fully inside ",
+                                 allowed_start, "–", allowed_end, ". Try reducing window_size or expanding allowed range.")))
+  }
+  
+  candidates <- full_hours |> dplyr::filter(hour_of_day %in% allowed_starts)
+  
+  if (all(is.na(candidates$rolling_avg))) {
+    return(list(error = TRUE,
+                message = "No valid averages (maybe too many missing hourly values)."))
+  }
+  
+  # pick best (min) and worst (max)
+  best_row <- candidates |> dplyr::slice_min(rolling_avg, n = 1, with_ties = FALSE)
+  worst_row <- candidates |> dplyr::slice_max(rolling_avg, n = 1, with_ties = FALSE)
+  
+  make_label <- function(start_hr) {
+    end_hr <- start_hr + window_size - 1
+    # do not wrap in label (we only choose windows within the allowed range)
+    paste0(labels_12h[start_hr + 1], " – ", labels_12h[(end_hr %% 24) + 1])
+  }
+  
+  list(
+    error = FALSE,
+    window_size = window_size,
+    allowed_range = paste0(allowed_start, "–", allowed_end),
+    best = list(
+      start_hour = best_row$hour_of_day,
+      label = make_label(best_row$hour_of_day),
+      avg = round(best_row$rolling_avg, 1)
+    ),
+    worst = list(
+      start_hour = worst_row$hour_of_day,
+      label = make_label(worst_row$hour_of_day),
+      avg = round(worst_row$rolling_avg, 1)
+    )
+  )
+}
+
+
+
+# -----------------------------
 # UI
 # -----------------------------
 ui <- fluidPage(
@@ -95,7 +178,7 @@ ui <- fluidPage(
   ),
   
   titlePanel(div(class = "page-title", 
-                 h2("New Voices Air Monitoring Network - Weekly Review 🌤️"))),
+                 h2("New Voices Air Monitoring Network - Weekly Review️"))),
   
   sidebarLayout(
     sidebarPanel(
@@ -135,6 +218,22 @@ ui <- fluidPage(
               )
           )
         )
+      ),
+      ## --- Best / Worst windows card ---
+      div(class = "card",
+          h4("Best / Worst Exposure Windows (suggested)"),
+          div(style = "display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap;",
+              div(style = "flex:1; min-width:220px;",
+                  strong("Best time to go outside (lowest avg)"),
+                  p(textOutput("bestWindow", inline = TRUE))
+              ),
+              div(style = "flex:1; min-width:220px;",
+                  strong("Time to avoid (highest avg)"),
+                  p(textOutput("worstWindow", inline = TRUE))
+              )
+          ),
+          p(style = "margin-top:8px; font-size:12px; color:#555;",
+            "Window size and allowed range are: 3 hours, local time 6 AM–10 PM by default.")
       ),
       div(class = "card",
           h4("Average PM2.5 by Day of Week"),
@@ -186,37 +285,36 @@ server <- function(input, output, session) {
   
   # ---- hour plot ----
   output$hourPlot <- renderPlotly({
-    dat <- df_hour()
-    tick_idx <- seq(0, 23, by = input$nth)
-    
-    plot_ly(
-      dat,
-      x = ~hour_of_day, y = ~hour_of_day_avg,
-      type = "scatter", mode = "lines+markers",
-      fill = "tozeroy",
-      text = ~paste0(
-        "Hour: ", labels_12h[hour_of_day + 1],
-        "<br>Avg: ", round(hour_of_day_avg, 1), " µg/m³"
-      ),
-      hoverinfo = "text"
-    ) |>
-      layout(
-        xaxis = list(
-          title = "Hour of Day (PT)",
-          tickmode = "array",
-          tickvals = tick_idx,
-          ticktext = labels_12h[tick_idx + 1]
+      dat <- df_hour()
+      tick_idx <- seq(0, 23, by = input$nth)
+      plot_ly(
+        dat,
+        x = ~hour_of_day, y = ~hour_of_day_avg,
+        type = "scatter", mode = "lines+markers",
+        fill = "tozeroy",
+        text = ~paste0(
+          "Hour: ", labels_12h[hour_of_day + 1],
+          "<br>Avg: ", round(hour_of_day_avg, 1), " µg/m³"
         ),
-        yaxis = list(title = "Average PM2.5 (µg/m³)"),
-        margin = list(l = 60, r = 20, t = 10, b = 60)
+        hoverinfo = "text"
       ) |>
-      config(displaylogo = FALSE, modeBarButtonsToRemove = c("select2d","lasso2d"))
+        layout(
+          xaxis = list(
+            title = "Hour of Day (PT)",
+            tickmode = "array",
+            tickvals = tick_idx,
+            ticktext = labels_12h[tick_idx + 1]
+          ),
+          yaxis = list(title = "Average PM2.5 (µg/m³)"),
+          margin = list(l = 60, r = 20, t = 10, b = 60)
+        ) |>
+        config(displaylogo = FALSE, modeBarButtonsToRemove = c("select2d","lasso2d"))
+  
   })
   
   # ---- day-of-week plot (use the column!) ----
   output$dowPlot <- renderPlotly({
     dat <- df_dow()
-    
     plot_ly(
       dat,
       x = ~weekday,              # <— use precomputed label column
@@ -251,6 +349,36 @@ server <- function(input, output, session) {
     dat <- df_hour()
     req(nrow(dat) > 0)
     labels_12h[dat$hour_of_day[which.max(dat$hour_of_day_avg)] + 1]
+  })
+  
+  # ---- compute best/worst windows ----
+  windows_res <- reactive({
+    dat <- df_hour()
+    # df_hour should have hour_of_day and hour_of_day_avg
+    if (nrow(dat) == 0) return(list(error = TRUE, message = "No hourly data"))
+    # call the function (you can change window_size / allowed range here)
+    find_best_worst_windows(hour_df = dat,
+                            window_size = 3,
+                            allowed_start = 6,
+                            allowed_end = 22)
+  })
+  
+  output$bestWindow <- renderText({
+    res <- windows_res()
+    if (is.null(res)) return("")
+    if (isTRUE(res$error)) {
+      return(res$message)
+    }
+    paste0(res$best$label, " (avg ", res$best$avg, " µg/m³)")
+  })
+  
+  output$worstWindow <- renderText({
+    res <- windows_res()
+    if (is.null(res)) return("")
+    if (isTRUE(res$error)) {
+      return(res$message)
+    }
+    paste0(res$worst$label, " (avg ", res$worst$avg, " µg/m³)")
   })
   
 }
