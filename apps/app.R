@@ -1,11 +1,12 @@
 # app.R
 library(shiny)
 library(bslib)
-library(plotly)
 library(dplyr)
 library(thematic)
 library(readr)
 library(lubridate) 
+library(magrittr)
+library(plotly)
 
 # Data Parsing Function ---------------------------------------------------
 clean_monitor_data <- function(path, location_name) {
@@ -22,10 +23,10 @@ clean_monitor_data <- function(path, location_name) {
 }
 
 # Read in Data --------------------------------------------------------------------
-oakland_mon <- clean_monitor_data("apps/weekly_data/PurpleAir_Week_Oct19_Oct26_2025/EastOaklandRoseOct19to26.csv", "East Oakland Sensor")
-pittsburg <- clean_monitor_data("apps/weekly_data/PurpleAir_Week_Oct19_Oct26_2025/PittsburgRoseOct19to26.csv", "Pittsburg Sensor")
-pittsburg_high <- clean_monitor_data("apps/weekly_data/PurpleAir_Week_Oct19_Oct26_2025/PittsburgHighRoseOct19to26.csv", "Pittsburg High Sensor")
-richmond <- clean_monitor_data("apps/weekly_data/PurpleAir_Week_Oct19_Oct26_2025/PointRichmondRoseOct19to26.csv", "Point Richmond Sensor")
+oakland_mon <- clean_monitor_data("weekly_data/PurpleAir_Week_Oct19_Oct26_2025/EastOaklandRoseOct19to26.csv", "East Oakland Sensor")
+pittsburg <- clean_monitor_data("weekly_data/PurpleAir_Week_Oct19_Oct26_2025/PittsburgRoseOct19to26.csv", "Pittsburg Sensor")
+pittsburg_high <- clean_monitor_data("weekly_data/PurpleAir_Week_Oct19_Oct26_2025/PittsburgHighRoseOct19to26.csv", "Pittsburg High Sensor")
+richmond <- clean_monitor_data("weekly_data/PurpleAir_Week_Oct19_Oct26_2025/PointRichmondRoseOct19to26.csv", "Point Richmond Sensor")
 
 df_all <- bind_rows(oakland_mon, pittsburg, pittsburg_high, richmond)
 
@@ -308,9 +309,9 @@ server <- function(input, output, session) {
           yaxis = list(title = "Average PM2.5 (µg/m³)"),
           margin = list(l = 60, r = 20, t = 10, b = 60)
         ) |>
-        config(displaylogo = FALSE, modeBarButtonsToRemove = c("select2d","lasso2d"))
-  
+        plotly::config(displaylogo = FALSE, modeBarButtonsToRemove = c("select2d","lasso2d"))
   })
+  
   
   # ---- day-of-week plot (use the column!) ----
   output$dowPlot <- renderPlotly({
@@ -337,7 +338,7 @@ server <- function(input, output, session) {
         ),
         margin = list(l = 70, r = 30, t = 60, b = 70)
       ) |>
-      config(displaylogo = FALSE, modeBarButtonsToRemove = c("select2d","lasso2d"))
+      plotly::config(displaylogo = FALSE, modeBarButtonsToRemove = c("select2d","lasso2d"))
   })
   output$avgBox <- renderText({
     dat <- df_hour()
