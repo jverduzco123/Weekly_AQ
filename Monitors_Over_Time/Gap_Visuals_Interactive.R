@@ -8,6 +8,15 @@
 #
 
 library(shiny)
+library(dplyr)
+library(lubridate)
+library(leaflet)
+
+# Read in data ------------------------------------------------------------
+
+yearly_timeline <- read.csv("~/Weekly_AQ/apps/monitor_timeline_yearly.csv")
+monthly_timeline <- read.csv("~/Weekly_AQ/apps/monitor_timeline_monthly.csv")
+
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
@@ -29,7 +38,7 @@ server <- function(input, output) {
   })
   
   observe({
-    filtered <- monitor_by_year %>% filter(Year == input$year)
+    filtered <- yearly_timeline %>% filter(Year == input$year)
     
     leafletProxy("map") %>%
       clearMarkers() %>%

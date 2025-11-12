@@ -1,0 +1,3 @@
+linters: lintr::with_defaults(
+  line_length_linter = NULL
+)
