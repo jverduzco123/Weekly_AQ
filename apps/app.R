@@ -14,7 +14,7 @@ library(httr)
 library(sf)
 
 # Data Parsing Function ---------------------------------------------------
-clean_monitor_data <- function(path, location_name) {
+clean_monitor_data <- function(path, location_name, week_id, week_start, week_end) {
   df <- read.csv(path)
   df <- df |>
     mutate(
@@ -22,18 +22,64 @@ clean_monitor_data <- function(path, location_name) {
       hour_of_day = hour(parsed_pt_date),
       day = day(parsed_pt_date),
       dow = wday(parsed_pt_date),
-      location = location_name
+      location = location_name,
+      week_id = week_id,
+      week_start = week_start,
+      week_end = week_end,
+      week_label = paste0("Week of ", format(week_start, "%B %d, %Y"))
     )
   df
 }
 
-# Read in Data --------------------------------------------------------------------
-oakland_mon <- clean_monitor_data("weekly_data/PurpleAir_Week_Oct19_Oct26_2025/EastOaklandRoseOct19to26.csv", "East Oakland Sensor")
-pittsburg <- clean_monitor_data("weekly_data/PurpleAir_Week_Oct19_Oct26_2025/PittsburgRoseOct19to26.csv", "Pittsburg Sensor")
-pittsburg_high <- clean_monitor_data("weekly_data/PurpleAir_Week_Oct19_Oct26_2025/PittsburgHighRoseOct19to26.csv", "Pittsburg High Sensor")
-richmond <- clean_monitor_data("weekly_data/PurpleAir_Week_Oct19_Oct26_2025/PointRichmondRoseOct19to26.csv", "Point Richmond Sensor")
+# Load data for a single week
+load_week_data <- function(week_folder, week_id, week_start, week_end) {
+  base_path <- file.path("weekly_data", week_folder)
+  
+  oakland_mon <- clean_monitor_data(
+    file.path(base_path, "EastOaklandRoseOct19to26.csv"),
+    "East Oakland Sensor", week_id, week_start, week_end
+  )
+  pittsburg <- clean_monitor_data(
+    file.path(base_path, "PittsburgRoseOct19to26.csv"),
+    "Pittsburg Sensor", week_id, week_start, week_end
+  )
+  pittsburg_high <- clean_monitor_data(
+    file.path(base_path, "PittsburgHighRoseOct19to26.csv"),
+    "Pittsburg High Sensor", week_id, week_start, week_end
+  )
+  richmond <- clean_monitor_data(
+    file.path(base_path, "PointRichmondRoseOct19to26.csv"),
+    "Point Richmond Sensor", week_id, week_start, week_end
+  )
+  
+  bind_rows(oakland_mon, pittsburg, pittsburg_high, richmond)
+}
 
-df_all <- bind_rows(oakland_mon, pittsburg, pittsburg_high, richmond)
+# Read in Data --------------------------------------------------------------------
+# Week 1: October 19-26, 2025
+week_oct19 <- load_week_data(
+  "PurpleAir_Week_Oct19_Oct26_2025",
+  "oct19_oct26_2025",
+  as.Date("2025-10-19"),
+  as.Date("2025-10-26")
+)
+
+# When adding a new week, uncomment and add it here:
+# week_oct26 <- load_week_data(
+#   "PurpleAir_Week_Oct26_Nov02_2025",
+#   "oct26_nov02_2025",
+#   as.Date("2025-10-26"),
+#   as.Date("2025-11-02")
+# )
+
+# Combine all weeks
+df_all <- bind_rows(week_oct19)  # Add more weeks: bind_rows(week_oct19, week_oct26, ...)
+
+# Create week choices for dropdown (sorted by date, most recent first)
+week_choices_df <- df_all |>
+  distinct(week_id, week_label, week_start) |>
+  arrange(desc(week_start))
+week_choices <- setNames(week_choices_df$week_id, week_choices_df$week_label)
 
 # Label helpers
 
@@ -573,6 +619,10 @@ ui <- fluidPage(
         choices = c(unique(df_all$location)),
         selected = "East Oakland Sensor"
       ),
+      selectInput("week", "Choose week",
+        choices = week_choices,
+        selected = week_choices[[1]]
+      ),
       div(
         class = "card",
         h4("Weekly Average PM2.5"),
@@ -749,10 +799,41 @@ ui <- fluidPage(
       div(
         class = "card",
         h4("Average PM2.5 by Day of Week"),
+        p(
+          style = "margin-top: -6px; margin-bottom: 12px; font-size: 1.1em; color: #002942; font-weight: 500;",
+          textOutput("dowWeekInfo", inline = TRUE)
+        ),
         plotlyOutput("dowPlot", height = "420px"),
         p(
           style = "margin-top: 8px; font-size: 11px; color: #4a5b67; font-style: italic;",
           "Tip: double-click inside the chart to reset the zoom."
+        ),
+        p(
+          style = "margin-top: 12px; margin-bottom: 4px; font-size: 11px; color: #3a4b57;",
+          "Background shading = Air Quality Index (AQI) zones for PM2.5. ",
+          tags$a(
+            href = "https://www.epa.gov/system/files/documents/2024-02/pm-naaqs-air-quality-index-fact-sheet.pdf",
+            target = "_blank",
+            style = "color: #0d4a8b; font-weight: 600;",
+            "Learn more about AQI here"
+          ),
+          "."
+        ),
+        p(
+          style = "margin: 4px 0; font-size: 11px; color: #3a4b57;",
+          tags$span(
+            style = "display: inline-block; width: 12px; height: 12px; background: #d4edda; border: 1px solid #9DBF3B; border-radius: 3px; margin-right: 6px; vertical-align: middle;"
+          ),
+          tags$strong("Green (0–9 µg/m³):"),
+          " Good: air quality is healthy."
+        ),
+        p(
+          style = "margin: 4px 0; font-size: 11px; color: #3a4b57;",
+          tags$span(
+            style = "display: inline-block; width: 12px; height: 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 3px; margin-right: 6px; vertical-align: middle;"
+          ),
+          tags$strong("Yellow (9.1–35.4 µg/m³):"),
+          " Moderate: air quality is acceptable, but there may be a risk for sensitive groups (youth, elders, asthma)."
         )
       ),
       div(
@@ -762,6 +843,33 @@ ui <- fluidPage(
         p(
           style = "margin-top: 8px; font-size: 11px; color: #4a5b67; font-style: italic;",
           "Tip: double-click inside the chart to reset the zoom."
+        ),
+        p(
+          style = "margin-top: 12px; margin-bottom: 4px; font-size: 11px; color: #3a4b57;",
+          "Background shading = Air Quality Index (AQI) zones for PM2.5. ",
+          tags$a(
+            href = "https://www.epa.gov/system/files/documents/2024-02/pm-naaqs-air-quality-index-fact-sheet.pdf",
+            target = "_blank",
+            style = "color: #0d4a8b; font-weight: 600;",
+            "Learn more about AQI here"
+          ),
+          "."
+        ),
+        p(
+          style = "margin: 4px 0; font-size: 11px; color: #3a4b57;",
+          tags$span(
+            style = "display: inline-block; width: 12px; height: 12px; background: #d4edda; border: 1px solid #9DBF3B; border-radius: 3px; margin-right: 6px; vertical-align: middle;"
+          ),
+          tags$strong("Green (0–9 µg/m³):"),
+          " Good: air quality is healthy."
+        ),
+        p(
+          style = "margin: 4px 0; font-size: 11px; color: #3a4b57;",
+          tags$span(
+            style = "display: inline-block; width: 12px; height: 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 3px; margin-right: 6px; vertical-align: middle;"
+          ),
+          tags$strong("Yellow (9.1–35.4 µg/m³):"),
+          " Moderate: air quality is acceptable, but there may be a risk for sensitive groups (youth, elders, asthma)."
         )
       ),
       div(
@@ -826,10 +934,11 @@ ui <- fluidPage(
 server <- function(input, output, session) {
   thematic_shiny()
 
-  # Location-only filtered data (one week's worth already)
+  # Location and week filtered data
   df_filtered <- reactive({
-    req(nrow(df_all) > 0, input$area)
-    df_all |> filter(location == input$area)
+    req(nrow(df_all) > 0, input$area, input$week)
+    df_all |> 
+      filter(location == input$area, week_id == input$week)
   })
 
   # ---- summaries ----
@@ -874,11 +983,18 @@ server <- function(input, output, session) {
       layout(
         xaxis = list(
           title = "Hour of Day (PT)",
+          titlefont = list(family = "Rubik, sans-serif", size = 16, color = "#002942"),
           tickmode = "array",
           tickvals = tick_idx,
-          ticktext = labels_12h[tick_idx + 1]
+          ticktext = labels_12h[tick_idx + 1],
+          tickfont = list(family = "Rubik, sans-serif", size = 14, color = "#002942")
         ),
-        yaxis = list(title = "Average PM2.5 (µg/m³)"),
+        yaxis = list(
+          title = "Average PM2.5 (µg/m³)",
+          titlefont = list(family = "Rubik, sans-serif", size = 16, color = "#002942"),
+          tickfont = list(family = "Rubik, sans-serif", size = 13, color = "#002942"),
+          gridcolor = "rgba(0,0,0,0.05)"
+        ),
         margin = list(l = 60, r = 20, t = 10, b = 60),
         shapes = list(
           list(
@@ -954,6 +1070,22 @@ server <- function(input, output, session) {
       ) |>
       plotly::config(displaylogo = FALSE, modeBarButtonsToRemove = c("select2d", "lasso2d"))
   })
+  
+  # Week information for day-of-week plot
+  output$dowWeekInfo <- renderText({
+    dat <- df_filtered()
+    req(nrow(dat) > 0)
+    week_start <- unique(dat$week_start)[1]
+    week_end <- unique(dat$week_end)[1]
+    if (!is.na(week_start) && !is.na(week_end)) {
+      start_str <- format(week_start, "%B %d")
+      end_str <- format(week_end, "%B %d, %Y")
+      paste0("Data from ", start_str, "–", end_str)
+    } else {
+      ""
+    }
+  })
+  
   output$avgBox <- renderText({
     dat <- df_hour()
     req(nrow(dat) > 0)
